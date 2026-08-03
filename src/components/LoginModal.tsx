@@ -8,8 +8,8 @@ interface LoginModalProps {
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
-  const [username, setUsername] = useState('lela');
-  const [password, setPassword] = useState('otogio123');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -121,17 +121,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
             >
               დაგავიწყდათ პაროლი? (პაროლის აღდგენა)
             </button>
-          </div>
-
-          {/* Preset Helper Card */}
-          <div className="mt-4 p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600">
-            <p className="font-semibold text-slate-800 mb-1">თავდაპირველი ადმინისტრატორის ანგარიში:</p>
-            <p>
-              მომხმარებელი: <code className="bg-slate-200 px-1 py-0.5 rounded font-mono font-bold">lela</code>
-            </p>
-            <p>
-              საწყისი პაროლი: <code className="bg-slate-200 px-1 py-0.5 rounded font-mono font-bold">otogio123</code>
-            </p>
           </div>
         </form>
       </div>
