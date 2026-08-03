@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import * as XLSX from 'xlsx';
 import {
   Search,
   Filter,
@@ -13,9 +12,28 @@ import {
   UserPlus,
   RefreshCw,
 } from 'lucide-react';
-import { Person, PersonStatus, PlacementType } from '../types';
+import { Person } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
-import { formatDateToGeorgian } from '../../server/utils';
+import { formatDateToGeorgian } from '../utils';
+import { exportStyledExcel, PrintableReport, ReportColumn } from '../lib/reportExport';
+
+const LIST_COLUMNS: ReportColumn[] = [
+  { header: 'ქეისის №', width: 15 },
+  { header: 'სახელი', width: 12 },
+  { header: 'გვარი', width: 14 },
+  { header: 'პირადი ნომერი', width: 14 },
+  { header: 'დაბადების თარიღი', width: 14 },
+  { header: 'ასაკი', width: 6 },
+  { header: 'ჩარიცხვის თარიღი', width: 14 },
+  { header: 'ჩარიცხვის წყარო', width: 20 },
+  { header: 'ჩარიცხვის მიზეზი', width: 24 },
+  { header: 'სტატუსი', width: 10 },
+  { header: 'მიმდინარე პროგრამა', width: 26 },
+  { header: 'პროგრამის დაწყება', width: 14 },
+  { header: 'პროგრამის დასრულება', width: 15 },
+  { header: 'ვადის მდგომარეობა', width: 16 },
+  { header: 'ქეისის მდგომარეობა', width: 14 },
+];
 
 interface PersonsListViewProps {
   persons: Person[];
@@ -112,30 +130,41 @@ export const PersonsListView: React.FC<PersonsListViewProps> = ({
     setCurrentPage(1);
   };
 
-  // Excel Export
-  const exportToExcel = () => {
-    const exportData = filteredPersons.map((p) => ({
-      'ქეისის №': p.case_number,
-      'სახელი': p.first_name,
-      'გვარი': p.last_name,
-      'პირადი ნომერი': p.personal_number,
-      'დაბადების თარიღი': formatDateToGeorgian(p.birth_date),
-      'ასაკი': p.calculated_age,
-      'ჩარიცხვის თარიღი': formatDateToGeorgian(p.admission_date),
-      'ჩარიცხვის წყარო': p.admission_source,
-      'ჩარიცხვის მიზეზი': p.admission_reason,
-      'სტატუსი': p.person_status,
-      'მიმდინარე პროგრამა': p.current_placement?.placement_type || 'არ არის',
-      'პროგრამის დაწყება': formatDateToGeorgian(p.current_placement?.start_date),
-      'პროგრამის დასრულება': formatDateToGeorgian(p.current_placement?.planned_end_date),
-      'ვადის მდგომარეობა': p.reminder_status || 'ნორმალური',
-      'ქეისის მდგომარეობა': p.is_locked ? 'დაბლოკილია' : 'ღიაა',
-    }));
+  // მწკრივების აგება (Excel + ბეჭდვა)
+  const listRows: (string | number)[][] = filteredPersons.map((p) => [
+    p.case_number,
+    p.first_name,
+    p.last_name,
+    p.personal_number,
+    formatDateToGeorgian(p.birth_date),
+    p.calculated_age ?? '',
+    formatDateToGeorgian(p.admission_date),
+    p.admission_source,
+    p.admission_reason,
+    p.person_status,
+    p.current_placement?.placement_type || 'არ არის',
+    formatDateToGeorgian(p.current_placement?.start_date),
+    formatDateToGeorgian(p.current_placement?.planned_end_date),
+    p.reminder_status || 'ნორმალური',
+    p.is_locked ? 'დაბლოკილია' : 'ღიაა',
+  ]);
 
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'პირთა ბაზა');
-    XLSX.writeFile(workbook, `Mindobiti_Agzrda_Baza_${new Date().toISOString().split('T')[0]}.xlsx`);
+  const listTitle = showArchived ? 'ბენეფიციართა ბაზა — არქივირებული ქეისები' : 'ბენეფიციართა ბაზა — აქტიური ქეისები';
+  const listMeta = () => [
+    `პროგრამა: ${selectedPlacementType === 'all' ? 'ყველა' : selectedPlacementType} · სტატუსი: ${selectedPersonStatus === 'all' ? 'ყველა' : selectedPersonStatus} · ვადა: ${selectedReminderStatus === 'all' ? 'ყველა' : selectedReminderStatus}`,
+    `გენერირების თარიღი: ${new Date().toLocaleString('ka-GE')} · სულ ჩანაწერი: ${filteredPersons.length}`,
+  ];
+
+  // Excel Export (სტილიზებული)
+  const exportToExcel = () => {
+    exportStyledExcel({
+      fileName: `Mindobiti_Baza_${new Date().toISOString().split('T')[0]}.xlsx`,
+      sheetName: 'პირთა ბაზა',
+      title: listTitle,
+      meta: listMeta(),
+      columns: LIST_COLUMNS,
+      rows: listRows,
+    });
   };
 
   // Print view
@@ -421,6 +450,9 @@ export const PersonsListView: React.FC<PersonsListViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* ბეჭდვის ვერსია (ეკრანზე დამალული) */}
+      <PrintableReport title={listTitle} meta={listMeta()} columns={LIST_COLUMNS} rows={listRows} />
     </div>
   );
 };

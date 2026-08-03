@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { DashboardStats, Person, NavTab } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
-import { formatDateToGeorgian } from '../../server/utils';
+import { formatDateToGeorgian } from '../utils';
 
 interface DashboardViewProps {
   stats?: DashboardStats;

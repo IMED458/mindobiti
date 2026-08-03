@@ -1,12 +1,28 @@
 import React, { useState } from 'react';
-import * as XLSX from 'xlsx';
-import { FileSpreadsheet, Download, Printer, Filter, Calendar } from 'lucide-react';
-import { Person, PlacementType, PersonStatus } from '../types';
-import { formatDateToGeorgian } from '../../server/utils';
+import { FileSpreadsheet, Download, Printer } from 'lucide-react';
+import { Person } from '../types';
+import { formatDateToGeorgian } from '../utils';
+import { exportStyledExcel, PrintableReport, ReportColumn } from '../lib/reportExport';
 
 interface ReportsViewProps {
   persons: Person[];
 }
+
+const REPORT_COLUMNS: ReportColumn[] = [
+  { header: 'ქეისის №', width: 15 },
+  { header: 'სახელი', width: 12 },
+  { header: 'გვარი', width: 14 },
+  { header: 'პირადი ნომერი', width: 14 },
+  { header: 'დაბადების თარიღი', width: 14 },
+  { header: 'ასაკი', width: 6 },
+  { header: 'ჩარიცხვის თარიღი', width: 14 },
+  { header: 'ჩარიცხვის წყარო', width: 22 },
+  { header: 'სტატუსი', width: 10 },
+  { header: 'მიმდინარე პროგრამა', width: 26 },
+  { header: 'პროგრამის დაწყება', width: 14 },
+  { header: 'პროგრამის დასრულება', width: 15 },
+  { header: 'ვადის მდგომარეობა', width: 16 },
+];
 
 export const ReportsView: React.FC<ReportsViewProps> = ({ persons }) => {
   const [placementFilter, setPlacementFilter] = useState<string>('all');
@@ -34,28 +50,47 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ persons }) => {
     return true;
   });
 
-  // Excel Export
-  const handleExportExcel = () => {
-    const reportRows = filteredData.map((p) => ({
-      'ქეისის №': p.case_number,
-      'სახელი': p.first_name,
-      'გვარი': p.last_name,
-      'პირადი ნომერი': p.personal_number,
-      'დაბადების თარიღი': formatDateToGeorgian(p.birth_date),
-      'ასაკი': p.calculated_age,
-      'ჩარიცხვის თარიღი': formatDateToGeorgian(p.admission_date),
-      'ჩარიცხვის წყარო': p.admission_source,
-      'სტატუსი': p.person_status,
-      'მიმდინარე პროგრამა': p.current_placement?.placement_type || 'არ არის',
-      'პროგრამის დაწყება': formatDateToGeorgian(p.current_placement?.start_date),
-      'პროგრამის დასრულება': formatDateToGeorgian(p.current_placement?.planned_end_date),
-      'ვადის მდგომარეობა': p.reminder_status || 'ნორმალური',
-    }));
+  // მწკრივების აგება (ერთი წყარო Excel-სა და ბეჭდვისთვის)
+  const reportRows: (string | number)[][] = filteredData.map((p) => [
+    p.case_number,
+    p.first_name,
+    p.last_name,
+    p.personal_number,
+    formatDateToGeorgian(p.birth_date),
+    p.calculated_age ?? '',
+    formatDateToGeorgian(p.admission_date),
+    p.admission_source,
+    p.person_status,
+    p.current_placement?.placement_type || 'არ არის',
+    formatDateToGeorgian(p.current_placement?.start_date),
+    formatDateToGeorgian(p.current_placement?.planned_end_date),
+    p.reminder_status || 'ნორმალური',
+  ]);
 
-    const worksheet = XLSX.utils.json_to_sheet(reportRows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'ანგარიში');
-    XLSX.writeFile(workbook, `Angarishi_Mindobiti_${new Date().toISOString().split('T')[0]}.xlsx`);
+  const metaLines = () => {
+    const caseLbl = caseStatusFilter === 'active' ? 'აქტიური ქეისები' : caseStatusFilter === 'archived' ? 'არქივირებული ქეისები' : 'ყველა ქეისი';
+    const lines = [
+      `ფილტრი: ${caseLbl} · პროგრამა: ${placementFilter === 'all' ? 'ყველა' : placementFilter} · სტატუსი: ${statusFilter === 'all' ? 'ყველა' : statusFilter}`,
+    ];
+    if (startDate || endDate) {
+      lines.push(`ჩარიცხვის პერიოდი: ${startDate ? formatDateToGeorgian(startDate) : '—'} – ${endDate ? formatDateToGeorgian(endDate) : '—'}`);
+    }
+    lines.push(`გენერირების თარიღი: ${new Date().toLocaleString('ka-GE')} · სულ ჩანაწერი: ${filteredData.length}`);
+    return lines;
+  };
+
+  const reportTitle = 'მინდობითი აღზრდის სტატისტიკური ანგარიში';
+
+  // Excel Export (სტილიზებული)
+  const handleExportExcel = () => {
+    exportStyledExcel({
+      fileName: `Mindobiti_Angarishi_${new Date().toISOString().split('T')[0]}.xlsx`,
+      sheetName: 'ანგარიში',
+      title: reportTitle,
+      meta: metaLines(),
+      columns: REPORT_COLUMNS,
+      rows: reportRows,
+    });
   };
 
   const handlePrint = () => {
@@ -199,6 +234,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ persons }) => {
           </tbody>
         </table>
       </div>
+
+      {/* ბეჭდვის ვერსია (ეკრანზე დამალული) */}
+      <PrintableReport title={reportTitle} meta={metaLines()} columns={REPORT_COLUMNS} rows={reportRows} />
     </div>
   );
 };

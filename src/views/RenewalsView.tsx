@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Clock, AlertOctagon, AlertTriangle, CheckCircle2, ArrowRight, Lock } from 'lucide-react';
 import { Person } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
-import { formatDateToGeorgian } from '../../server/utils';
+import { formatDateToGeorgian } from '../utils';
 
 interface RenewalsViewProps {
   persons: Person[];

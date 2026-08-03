@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CalendarDays, Sparkles, Lock } from 'lucide-react';
 import { Person } from '../types';
-import { formatDateToGeorgian } from '../../server/utils';
+import { formatDateToGeorgian } from '../utils';
 
 interface AdulthoodViewProps {
   persons: Person[];

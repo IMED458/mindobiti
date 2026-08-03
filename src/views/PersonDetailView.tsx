@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Lock,
@@ -6,20 +6,41 @@ import {
   Edit,
   Clock,
   ArrowRightLeft,
-  History,
   Archive,
-  RotateCcw,
   UserCheck,
-  Calendar,
   AlertCircle,
-  FileText,
   Building,
-  CheckCircle,
+  ShieldAlert,
+  HeartHandshake,
+  Home,
+  User as UserIcon,
+  CheckCircle2,
 } from 'lucide-react';
-import { Person, User, PlacementType, PersonStatus } from '../types';
+import { Person, User, PlacementType, PersonStatus, SmallFamilyHome } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
-import { formatDateToGeorgian } from '../../server/utils';
+import { formatDateToGeorgian, addDaysISO } from '../utils';
 import { api } from '../api';
+import {
+  ProgramData,
+  ProgramSpecificFields,
+  emptyProgramData,
+  validateProgram,
+  buildPlacementPatch,
+  buildContactPerson,
+} from '../components/ProgramSpecificFields';
+
+const PROGRAM_OPTIONS: { id: PlacementType; title: string; desc: string; icon: any }[] = [
+  { id: 'გადაუდებელი მინდობითი აღზრდა', title: 'გადაუდებელი მინდობითი აღზრდა', desc: 'სწრაფი განთავსება 90 დღემდე', icon: ShieldAlert },
+  { id: 'რეგულარული მინდობითი აღზრდა', title: 'რეგულარული მინდობითი აღზრდა', desc: 'ხანგრძლივი მინდობითი ოჯახი', icon: HeartHandshake },
+  { id: 'ნათესაური მინდობითი აღზრდა', title: 'ნათესაური მინდობითი აღზრდა', desc: 'განთავსება ნათესავთან', icon: HeartHandshake },
+  { id: 'მცირე საოჯახო ტიპის სახლი', title: 'მცირე საოჯახო ტიპის სახლი', desc: 'საოჯახო ტიპის სახლი', icon: Home },
+  { id: 'რეინტეგრაცია', title: 'რეინტეგრაცია', desc: 'ბიოლოგიურ ოჯახში დაბრუნება', icon: UserIcon },
+];
+
+function defaultEndDate(type: PlacementType, startDate: string): string {
+  const base = startDate || new Date().toISOString().split('T')[0];
+  return type === 'გადაუდებელი მინდობითი აღზრდა' ? addDaysISO(base, 90) : addDaysISO(base, 365);
+}
 
 interface PersonDetailViewProps {
   person: Person;
@@ -51,13 +72,37 @@ export const PersonDetailView: React.FC<PersonDetailViewProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Small Family Homes dictionary (გადაყვანისთვის)
+  const [smallHomes, setSmallHomes] = useState<SmallFamilyHome[]>([]);
+  useEffect(() => {
+    api.getSmallHomes().then(setSmallHomes).catch(() => {});
+  }, []);
+
   // Transition Form
   const [transType, setTransType] = useState<PlacementType>('რეგულარული მინდობითი აღზრდა');
   const [transStartDate, setTransStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [transEndDate, setTransEndDate] = useState('');
   const [transReason, setTransReason] = useState('');
-  const [transLocation, setTransLocation] = useState('');
-  const [transComment, setTransComment] = useState('');
+  const [transProgData, setTransProgData] = useState<ProgramData>(emptyProgramData());
+
+  // გადაყვანის მოდალის გახსნა კონკრეტული სამიზნე პროგრამით
+  const openTransition = (type: PlacementType) => {
+    const start = new Date().toISOString().split('T')[0];
+    setTransType(type);
+    setTransStartDate(start);
+    setTransEndDate(defaultEndDate(type, start));
+    setTransReason('');
+    setTransProgData(emptyProgramData());
+    setError(null);
+    setShowTransitionModal(true);
+  };
+
+  // მოდალში პროგრამის შეცვლა
+  const selectTransProgram = (type: PlacementType) => {
+    setTransType(type);
+    setTransEndDate(defaultEndDate(type, transStartDate));
+    setTransProgData(emptyProgramData());
+  };
 
   // Extension Form
   const [extNewEndDate, setExtNewEndDate] = useState('');
@@ -87,6 +132,11 @@ export const PersonDetailView: React.FC<PersonDetailViewProps> = ({
       setError('გთხოვთ, შეავსოთ დასრულების თარიღი და გადაყვანის საფუძველი.');
       return;
     }
+    const progError = validateProgram(transType, transProgData);
+    if (progError) {
+      setError(progError);
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -96,8 +146,8 @@ export const PersonDetailView: React.FC<PersonDetailViewProps> = ({
         start_date: transStartDate,
         planned_end_date: transEndDate,
         reason: transReason,
-        location_or_organization: transLocation,
-        comment: transComment,
+        contact_person: buildContactPerson(transType, transProgData, smallHomes),
+        ...buildPlacementPatch(transType, transProgData, smallHomes),
       });
       setShowTransitionModal(false);
       onRefresh();
@@ -404,12 +454,7 @@ export const PersonDetailView: React.FC<PersonDetailViewProps> = ({
                   {/* Transition: Regular Foster Care */}
                   <button
                     disabled={isLocked && !isAdmin}
-                    onClick={() => {
-                      setTransType('რეგულარული მინდობითი აღზრდა');
-                      setTransEndDate('');
-                      setTransReason('');
-                      setShowTransitionModal(true);
-                    }}
+                    onClick={() => openTransition('რეგულარული მინდობითი აღზრდა')}
                     className="p-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 font-semibold text-xs rounded-xl border border-indigo-200 transition text-left flex items-center justify-between cursor-pointer disabled:opacity-40"
                   >
                     <div>
@@ -422,12 +467,7 @@ export const PersonDetailView: React.FC<PersonDetailViewProps> = ({
                   {/* Transition: Small Family Home */}
                   <button
                     disabled={isLocked && !isAdmin}
-                    onClick={() => {
-                      setTransType('მცირე საოჯახო ტიპის სახლი');
-                      setTransEndDate('');
-                      setTransReason('');
-                      setShowTransitionModal(true);
-                    }}
+                    onClick={() => openTransition('მცირე საოჯახო ტიპის სახლი')}
                     className="p-3 bg-teal-50 hover:bg-teal-100 text-teal-900 font-semibold text-xs rounded-xl border border-teal-200 transition text-left flex items-center justify-between cursor-pointer disabled:opacity-40"
                   >
                     <div>
@@ -440,12 +480,7 @@ export const PersonDetailView: React.FC<PersonDetailViewProps> = ({
                   {/* Transition: Reintegration */}
                   <button
                     disabled={isLocked && !isAdmin}
-                    onClick={() => {
-                      setTransType('რეინტეგრაცია');
-                      setTransEndDate('');
-                      setTransReason('');
-                      setShowTransitionModal(true);
-                    }}
+                    onClick={() => openTransition('რეინტეგრაცია')}
                     className="p-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 font-semibold text-xs rounded-xl border border-emerald-200 transition text-left flex items-center justify-between cursor-pointer disabled:opacity-40"
                   >
                     <div>
@@ -687,75 +722,97 @@ export const PersonDetailView: React.FC<PersonDetailViewProps> = ({
 
       {/* --- MODAL 1: PROGRAM TRANSITION --- */}
       {showTransitionModal && (
-        <div className="fixed inset-0 z-60 bg-slate-950/80 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 space-y-4">
-            <h3 className="text-base font-bold text-slate-900">პროგრამაში გადაყვანა: {transType}</h3>
+        <div className="fixed inset-0 z-60 bg-slate-950/80 flex items-center justify-center p-3 md:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-3xl w-full p-6 space-y-4 max-h-[92vh] overflow-y-auto">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <ArrowRightLeft className="w-5 h-5 text-blue-600" />
+                <span>პროგრამის შეცვლა / გადაყვანა</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                მიმდინარე პროგრამა: <span className="font-semibold text-slate-700">{person.current_placement?.placement_type || 'არ არის'}</span>.
+                აირჩიეთ ახალი პროგრამა და შეავსეთ სავალდებულო ველები.
+              </p>
+            </div>
+
             {error && (
               <div className="p-2.5 bg-rose-50 text-rose-700 text-xs rounded-lg flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{error}</span>
               </div>
             )}
-            <form onSubmit={handleTransitionSubmit} className="space-y-3 text-xs">
+
+            <form onSubmit={handleTransitionSubmit} className="space-y-4 text-xs">
+              {/* Program Selector */}
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">დაწყების თარიღი</label>
-                <input
-                  type="date"
-                  value={transStartDate}
-                  onChange={(e) => setTransStartDate(e.target.value)}
-                  required
-                  className="w-full p-2 border border-slate-300 rounded-lg"
-                />
+                <label className="block font-bold text-slate-800 mb-2">ახალი პროგრამის არჩევა *</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {PROGRAM_OPTIONS.map((prog) => {
+                    const Icon = prog.icon;
+                    const isSelected = transType === prog.id;
+                    return (
+                      <button
+                        type="button"
+                        key={prog.id}
+                        onClick={() => selectTransProgram(prog.id)}
+                        className={`p-3 rounded-xl border text-left transition cursor-pointer flex items-start justify-between gap-2 ${
+                          isSelected ? 'border-blue-600 bg-blue-50/80 ring-2 ring-blue-500/30' : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100/80'
+                        }`}
+                      >
+                        <div>
+                          <p className="font-bold text-slate-900 text-[11px] leading-tight">{prog.title}</p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">{prog.desc}</p>
+                        </div>
+                        {isSelected ? <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" /> : <Icon className="w-4 h-4 text-slate-400 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Dates & Reason */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">დაწყების თარიღი *</label>
+                  <input type="date" value={transStartDate}
+                    onChange={(e) => { setTransStartDate(e.target.value); setTransEndDate(defaultEndDate(transType, e.target.value)); }}
+                    required className="w-full p-2.5 border border-slate-300 rounded-xl" />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">გეგმიური დასრულების თარიღი *</label>
+                  <input type="date" value={transEndDate} onChange={(e) => setTransEndDate(e.target.value)}
+                    required className="w-full p-2.5 border border-slate-300 rounded-xl font-bold text-blue-700" />
+                </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">გეგმიური დასრულების თარიღი</label>
-                <input
-                  type="date"
-                  value={transEndDate}
-                  onChange={(e) => setTransEndDate(e.target.value)}
-                  required
-                  className="w-full p-2 border border-slate-300 rounded-lg font-bold text-blue-700"
-                />
+                <label className="block font-semibold text-slate-700 mb-1">გადაყვანის საფუძველი / მიზეზი *</label>
+                <textarea value={transReason} onChange={(e) => setTransReason(e.target.value)}
+                  placeholder="მიუთითეთ გადაყვანის ოფიციალური საფუძველი" required rows={2}
+                  className="w-full p-2.5 border border-slate-300 rounded-xl" />
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">გადაყვანის საფუძველი / მიზეზი</label>
-                <textarea
-                  value={transReason}
-                  onChange={(e) => setTransReason(e.target.value)}
-                  placeholder="მიუთითეთ გადაყვანის ოფიციალური საფუძველი"
-                  required
-                  rows={2}
-                  className="w-full p-2 border border-slate-300 rounded-lg"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">ორგანიზაცია / ლოკაცია (არასავალდებულო)</label>
-                <input
-                  type="text"
-                  value={transLocation}
-                  onChange={(e) => setTransLocation(e.target.value)}
-                  placeholder="მაგ: მცირე საოჯახო სახლი №1"
-                  className="w-full p-2 border border-slate-300 rounded-lg"
+              {/* Program-specific fields (რეგისტრაციის იდენტური) */}
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                <p className="font-bold text-slate-800 text-[11px] uppercase tracking-wider">
+                  პროგრამის სპეციფიკური ველები — {transType}
+                </p>
+                <ProgramSpecificFields
+                  program={transType}
+                  data={transProgData}
+                  onChange={(patch) => setTransProgData((prev) => ({ ...prev, ...patch }))}
+                  smallHomes={smallHomes}
                 />
               </div>
 
               <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowTransitionModal(false)}
-                  className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 font-semibold text-slate-700 rounded-lg cursor-pointer"
-                >
+                <button type="button" onClick={() => setShowTransitionModal(false)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 font-semibold text-slate-700 rounded-xl cursor-pointer">
                   გაუქმება
                 </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg cursor-pointer"
-                >
-                  {loading ? 'ინახება...' : 'გადაყვანა'}
+                <button type="submit" disabled={loading}
+                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl cursor-pointer disabled:opacity-50">
+                  {loading ? 'ინახება...' : 'გადაყვანის დადასტურება'}
                 </button>
               </div>
             </form>

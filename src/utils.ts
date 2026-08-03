@@ -1,4 +1,5 @@
 // Utility functions for dates, formatting, age calculations, leap year rules
+// (client-side — Firebase-ზე მიგრაციის შემდეგ სერვერი აღარ არსებობს)
 
 /**
  * Format ISO YYYY-MM-DD date string to DD/MM/YYYY
@@ -42,15 +43,12 @@ export function get18thBirthdayISO(birthDateISO: string): string {
 
   const targetYear = birthYear + 18;
 
-  // Leap year Feb 29 special handling:
-  // If born Feb 29 and target 18th year is NOT a leap year, use Feb 28.
   if (month === 2 && day === 29) {
     if (!isLeapYear(targetYear)) {
       return `${targetYear}-02-28`;
     }
   }
 
-  // Handle standard dates
   const paddedMonth = String(month).padStart(2, '0');
   const paddedDay = String(day).padStart(2, '0');
   return `${targetYear}-${paddedMonth}-${paddedDay}`;
@@ -79,7 +77,7 @@ export function get21stBirthdayISO(birthDateISO: string): string {
 }
 
 /**
- * Calculate exact age in completed years as of a given target date (defaults to today in Tbilisi timezone)
+ * Calculate exact age in completed years as of a given target date (defaults to today)
  */
 export function calculateAge(birthDateISO: string, referenceDateISO?: string): number {
   const birth = new Date(birthDateISO);
@@ -109,14 +107,13 @@ export function addDaysISO(dateISO: string, days: number): string {
  */
 export function addMonthsISO(dateISO: string, months: number): string {
   const [yearStr, monthStr, dayStr] = dateISO.split('-');
-  let y = parseInt(yearStr, 10);
-  let m = parseInt(monthStr, 10) - 1 + months;
-  let d = parseInt(dayStr, 10);
+  const y = parseInt(yearStr, 10);
+  const m = parseInt(monthStr, 10) - 1 + months;
+  const d = parseInt(dayStr, 10);
 
   const targetYear = y + Math.floor(m / 12);
   const targetMonth = ((m % 12) + 12) % 12; // 0-indexed
 
-  // Days in target month
   const daysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
   const safeDay = Math.min(d, daysInTargetMonth);
 
@@ -142,7 +139,6 @@ export function diffDaysISO(date1ISO: string, date2ISO: string): number {
  */
 export function getTodayTbilisiISO(): string {
   const now = new Date();
-  // Format to Tbilisi time
   const options: Intl.DateTimeFormatOptions = {
     timeZone: 'Asia/Tbilisi',
     year: 'numeric',

@@ -76,16 +76,27 @@ export interface Placement {
 
   // Dynamic program-specific fields
   foster_parent_name?: string; // მინდობით აღმზრდელის / ნათესავის სახელი და გვარი
+  foster_parent_personal_number?: string; // მიმღები მშობლის პირადი ნომერი
+  foster_parent_phone?: string; // მიმღები მშობლის ტელეფონი
+  foster_parent_address?: string; // მიმღები მშობლის ფაქტობრივი მისამართი
+  contract_number?: string; // ხელშეკრულების ნომერი
+  contract_date?: string; // ხელშეკრულების თარიღი
   placed_with?: string; // ვისთან განთავსდა
   relationship_type?: string; // ნათესაური კავშირი (ნათესაური მინდობითი აღზრდა)
+  kinship_relation?: string; // ნათესაური კავშირი ბავშვთან
+  kinship_decision_number?: string; // გადაწყვეტილების/ბრძანების ნომერი (ნათესაური)
   family_info?: string; // ოჯახის მონაცემები
-  
+
   small_home_id?: string; // მცირე საოჯახო ტიპის სახლის ID
   small_home_name?: string; // მცირე საოჯახო ტიპის სახლის დასახელება
   small_home_address?: string; // მისამართი
+  small_home_order_number?: string; // ჩარიცხვის ბრძანების ნომერი
   responsible_person?: string; // პასუხისმგებელი პირი
   enrollment_date?: string; // განთავსების / ჩარიცხვის / რეინტეგრაციის თარიღი
 
+  bio_family_member_name?: string; // ბიოლოგიური ოჯახის წევრის სახელი და გვარი (რეინტეგრაცია)
+  bio_family_relation?: string; // ნათესაური კავშირი (რეინტეგრაცია)
+  reintegration_allowance?: number; // ფინანსური დახმარების ოდენობა (ლარი/თვე)
   reintegration_target?: string; // ვისთან განხორციელდა რეინტეგრაცია
   reintegration_member_name?: string; // პირის/ოჯახის წევრის სახელი და გვარი
   reintegration_status_or_relation?: string; // სტატუსი ან ნათესაური კავშირი
