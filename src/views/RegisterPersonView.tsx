@@ -10,7 +10,7 @@ import {
   HeartHandshake,
   ShieldAlert,
 } from 'lucide-react';
-import { PersonStatus, PlacementType, SmallFamilyHome } from '../types';
+import { PersonStatus, PlacementType, SmallFamilyHome, FosterParent } from '../types';
 import { api } from '../api';
 import { addDaysISO } from '../utils';
 import {
@@ -31,6 +31,7 @@ export const RegisterPersonView: React.FC<RegisterPersonViewProps> = ({ onSucces
   const today = new Date().toISOString().split('T')[0];
 
   const [smallHomes, setSmallHomes] = useState<SmallFamilyHome[]>([]);
+  const [fosterParents, setFosterParents] = useState<FosterParent[]>([]);
 
   // Person State
   const [firstName, setFirstName] = useState('');
@@ -55,6 +56,7 @@ export const RegisterPersonView: React.FC<RegisterPersonViewProps> = ({ onSucces
 
   useEffect(() => {
     api.getSmallHomes().then(setSmallHomes).catch(() => {});
+    api.getFosterParents().then(setFosterParents).catch(() => {});
   }, []);
 
   // When selectedProgram or admissionDate changes, suggest a default planned_end_date (editable)
@@ -284,6 +286,7 @@ export const RegisterPersonView: React.FC<RegisterPersonViewProps> = ({ onSucces
               data={progData}
               onChange={(patch) => setProgData((prev) => ({ ...prev, ...patch }))}
               smallHomes={smallHomes}
+              fosterParents={fosterParents}
             />
           </div>
         )}

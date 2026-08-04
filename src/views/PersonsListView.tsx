@@ -11,6 +11,7 @@ import {
   Eye,
   UserPlus,
   RefreshCw,
+  CheckCircle2,
 } from 'lucide-react';
 import { Person } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
@@ -391,7 +392,14 @@ export const PersonsListView: React.FC<PersonsListViewProps> = ({
                       <StatusBadge type="person_status" value={p.person_status} />
                     </td>
                     <td className="py-3 px-3.5 font-semibold text-slate-800">
-                      {p.current_placement?.placement_type || 'არ არის'}
+                      <div className="flex flex-col gap-1">
+                        <span>{p.current_placement?.placement_type || 'არ არის'}</span>
+                        {p.review_done && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700">
+                            <CheckCircle2 className="w-3 h-3" /> გადასინჯულია
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-3 px-3.5">
                       <div className="flex flex-col">

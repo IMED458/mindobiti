@@ -109,6 +109,24 @@ export const api = {
   // ---------------- Reviews ----------------
   getReviews: async () => store.getReviews(),
   performReview: async (reviewId: string, data: any) => store.performReview(reviewId, data, modifier()),
+  reviewPerson: async (personId: string) => store.reviewPerson(personId, modifier()),
+
+  // ---------------- Foster Parents (მიმღები მშობლები) ----------------
+  getFosterParents: async () => store.getFosterParents(),
+  getFosterParentById: async (id: string) => store.getFosterParentById(id),
+  createFosterParent: async (data: any) => store.createFosterParent(data, modifier()),
+  updateFosterParent: async (id: string, updates: any) => store.updateFosterParent(id, updates, modifier()),
+  setChildrenException: async (id: string, enabled: boolean, reason?: string) => {
+    if (!isAdmin()) throw new Error('ლიმიტის გამონაკლისის მართვა შეუძლია მხოლოდ ადმინისტრატორს.');
+    return store.setChildrenException(id, enabled, reason, modifier());
+  },
+  deleteFosterParent: async (id: string) => {
+    await store.deleteFosterParent(id, modifier());
+    return { success: true };
+  },
+  attachChild: async (childId: string, fosterParentId: string) => store.attachChild(childId, fosterParentId, modifier()),
+  detachChild: async (childId: string) => store.detachChild(childId, modifier()),
+  transferChild: async (childId: string, newFosterParentId: string) => store.transferChild(childId, newFosterParentId, modifier()),
 
   // ---------------- Dashboard / Settings / Audit ----------------
   getDashboardStats: async (): Promise<DashboardStats> => store.getDashboardStats(),

@@ -25,7 +25,9 @@ import {
   CaseReview,
   SmallFamilyHome,
   DashboardStats,
+  FosterParent,
 } from './types';
+import { computeFosterStatus, canAttachChild, MAX_FOSTER_CHILDREN } from './lib/fosterLogic';
 import {
   getTodayTbilisiISO,
   addDaysISO,
@@ -50,6 +52,7 @@ interface DatabaseSchema {
   extensions: PlacementExtension[];
   reviews: CaseReview[];
   small_family_homes: SmallFamilyHome[];
+  foster_parents: FosterParent[];
   settings: SystemSettings;
   audit_logs: AuditLog[];
   case_counter: number;
@@ -79,6 +82,7 @@ class FirestoreStore {
     extensions: [],
     reviews: [],
     small_family_homes: [],
+    foster_parents: [],
     settings: { ...DEFAULT_SETTINGS },
     audit_logs: [],
     case_counter: 1000,
@@ -108,6 +112,7 @@ class FirestoreStore {
       extensionsSnap,
       reviewsSnap,
       homesSnap,
+      fosterSnap,
       auditSnap,
       metaSnap,
     ] = await Promise.all([
@@ -117,6 +122,7 @@ class FirestoreStore {
       getDocs(this.col('extensions')),
       getDocs(this.col('reviews')),
       getDocs(this.col('small_family_homes')),
+      getDocs(this.col('foster_parents')),
       getDocs(query(this.col('audit_logs'), orderBy('created_at', 'desc'), fsLimit(500))),
       getDocs(this.col('meta')),
     ]);
@@ -127,6 +133,7 @@ class FirestoreStore {
     this.data.extensions = extensionsSnap.docs.map((d) => d.data() as PlacementExtension);
     this.data.reviews = reviewsSnap.docs.map((d) => d.data() as CaseReview);
     this.data.small_family_homes = homesSnap.docs.map((d) => d.data() as SmallFamilyHome);
+    this.data.foster_parents = fosterSnap.docs.map((d) => d.data() as FosterParent);
     this.data.audit_logs = auditSnap.docs.map((d) => d.data() as AuditLog);
 
     const settingsDoc = metaSnap.docs.find((d) => d.id === 'settings');
@@ -204,6 +211,7 @@ class FirestoreStore {
       ['extensions', 'extensions'],
       ['reviews', 'reviews'],
       ['small_family_homes', 'small_family_homes'],
+      ['foster_parents', 'foster_parents'],
     ];
     simple.forEach(([colName, key]) => {
       onSnapshot(this.col(colName), (snap) => {
@@ -442,6 +450,7 @@ class FirestoreStore {
     return {
       location_or_organization: src.location_or_organization,
       comment: src.comment,
+      foster_parent_id: src.foster_parent_id,
       foster_parent_name: src.foster_parent_name,
       foster_parent_personal_number: src.foster_parent_personal_number,
       foster_parent_phone: src.foster_parent_phone,
@@ -525,6 +534,18 @@ class FirestoreStore {
       status: diffDaysISO(today, initialReviewDueDate) <= 30 ? 'გადასახედი' : 'დაგეგმილი',
       created_at: now, updated_at: now,
     };
+
+    // მიმღები მშობელზე მიმაგრება (თუ არჩეულია) — ლიმიტის აღსრულებით
+    const fpId = placementData.foster_parent_id;
+    if (fpId) {
+      const fp = this.data.foster_parents.find((f) => f.id === fpId);
+      if (!fp) throw new Error('არჩეული მიმღები მშობელი ვერ მოიძებნა.');
+      const count = this.activeChildrenOf(fpId).length;
+      if (!canAttachChild(count, fp.children_limit_exception)) {
+        throw new Error(`ამ მიმღებ მშობელს უკვე ჰყავს დაშვებული მაქსიმალური რაოდენობის — ${MAX_FOSTER_CHILDREN} ბავშვი.`);
+      }
+      newPerson.foster_parent_id = fpId;
+    }
 
     this.data.persons.push(newPerson);
     this.data.placements.push(initialPlacement);
@@ -655,6 +676,23 @@ class FirestoreStore {
       created_at: now, updated_at: now,
     };
 
+    // მიმღები მშობლის მიმაგრება/მოხსნა ახალი პროგრამის მიხედვით
+    const newFpId = transitionData.foster_parent_id;
+    if (newFpId) {
+      const fp = this.data.foster_parents.find((f) => f.id === newFpId);
+      if (!fp) throw new Error('არჩეული მიმღები მშობელი ვერ მოიძებნა.');
+      if (person.foster_parent_id !== newFpId) {
+        const count = this.activeChildrenOf(newFpId).length;
+        if (!canAttachChild(count, fp.children_limit_exception)) {
+          throw new Error(`ამ მიმღებ მშობელს უკვე ჰყავს დაშვებული მაქსიმალური რაოდენობის — ${MAX_FOSTER_CHILDREN} ბავშვი.`);
+        }
+      }
+      person.foster_parent_id = newFpId;
+    } else {
+      // პროგრამა მიმღები მშობლის გარეშე (მცირე სახლი / რეინტეგრაცია) → მოხსნა
+      person.foster_parent_id = undefined;
+    }
+
     this.data.placements.push(newPlacement);
     this.data.reviews.push(initialReview);
     person.updated_by = modifierName;
@@ -722,68 +760,70 @@ class FirestoreStore {
     return this.data.reviews || [];
   }
 
-  public async performReview(reviewId: string, data: any, modifierName: string): Promise<Person> {
+  /**
+   * გამარტივებული გადასინჯვა — მხოლოდ „შემოწმდა და წესრიგშია".
+   * არ იწყებს დამატებით პროცესს/ეტაპს და არ ცვლის პროგრამას.
+   */
+  private async markReviewDone(review: CaseReview, person: Person, modifierName: string): Promise<Person> {
+    const now = new Date().toISOString();
+    review.review_date = getTodayTbilisiISO();
+    review.performed_by = modifierName;
+    review.performed_at = now; // თარიღი + ზუსტი დრო
+    review.status = 'შესრულებული';
+    review.updated_at = now;
+
+    await this.persist('reviews', review);
+
+    await this.addAuditLog({
+      user_id: modifierName, user_name: modifierName,
+      action: 'გადასინჯვა შესრულებულია', entity_type: 'CaseReview', entity_id: review.id,
+      person_name: `${person.first_name} ${person.last_name}`,
+      person_personal_number: person.personal_number,
+      reason: 'პიროვნება შემოწმდა — ყველაფერი წესრიგშია',
+    });
+    return this.enrichPerson(person);
+  }
+
+  public async performReview(reviewId: string, _data: any, modifierName: string): Promise<Person> {
     const review = this.data.reviews.find((r) => r.id === reviewId);
     if (!review) throw new Error('გადასინჯვის ჩანაწერი ვერ მოიძებნა.');
     const person = this.data.persons.find((p) => p.id === review.person_id);
     if (!person) throw new Error('პირი ვერ მოიძებნა.');
-    const placement = this.data.placements.find((pl) => pl.id === review.placement_id);
+    return this.markReviewDone(review, person, modifierName);
+  }
 
-    const now = new Date().toISOString();
-    const actualReviewDate = data.review_date || getTodayTbilisiISO();
+  /** ერთი დაწკაპებით — პიროვნების გადასინჯვის დასრულება (პროფილიდან). */
+  public async reviewPerson(personId: string, modifierName: string): Promise<Person> {
+    const person = this.data.persons.find((p) => p.id === personId);
+    if (!person) throw new Error('პირი ვერ მოიძებნა.');
 
-    review.review_date = actualReviewDate;
-    review.result = data.result;
-    review.program_decision = data.program_decision || 'გაგრძელება';
-    review.comment = data.comment;
-    review.new_planned_end_date = data.new_planned_end_date;
-    review.notes = data.notes;
-    review.attachment_name = data.attachment_name;
-    review.performed_by = modifierName;
-    review.performed_at = now;
-    review.status = 'შესრულებული';
-    review.updated_at = now;
+    const current = this.data.placements
+      .filter((p) => p.person_id === personId)
+      .sort((a, b) => (b.start_date > a.start_date ? 1 : -1))
+      .find((p) => p.placement_status === 'აქტიური');
 
-    const batch = writeBatch(db);
+    // ვიპოვოთ შესასრულებელი გადასინჯვა (მიმდინარე პროგრამის) ან შევქმნათ
+    let review = this.data.reviews
+      .filter((r) => r.person_id === personId && r.status !== 'შესრულებული')
+      .sort((a, b) => (a.due_date > b.due_date ? 1 : -1))[0];
 
-    if (data.new_planned_end_date && placement && placement.placement_status === 'აქტიური') {
-      placement.planned_end_date = data.new_planned_end_date;
-      placement.updated_by = modifierName;
-      placement.updated_at = now;
-      batch.set(doc(db, 'placements', placement.id), clean(placement));
-    }
-
-    if (data.program_decision === 'დასრულება' && placement) {
-      placement.placement_status = 'დასრულებული';
-      placement.actual_end_date = actualReviewDate;
-      placement.updated_by = modifierName;
-      placement.updated_at = now;
-      batch.set(doc(db, 'placements', placement.id), clean(placement));
-    } else if (review.program_decision === 'გაგრძელება') {
-      const nextReview: CaseReview = {
+    if (!review) {
+      const now = new Date().toISOString();
+      const maxNum = this.data.reviews.filter((r) => r.person_id === personId).reduce((m, r) => Math.max(m, r.review_number || 0), 0);
+      review = {
         id: `review_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-        person_id: person.id, placement_id: review.placement_id,
-        review_number: review.review_number + 1,
-        due_date: addMonthsISO(actualReviewDate, 6),
-        status: diffDaysISO(getTodayTbilisiISO(), addMonthsISO(actualReviewDate, 6)) <= 30 ? 'გადასახედი' : 'დაგეგმილი',
-        created_at: now, updated_at: now,
+        person_id: personId,
+        placement_id: current?.id || '',
+        review_number: maxNum + 1,
+        placement_type: current?.placement_type,
+        due_date: getTodayTbilisiISO(),
+        status: 'გადასახედი',
+        created_at: now,
+        updated_at: now,
       };
-      this.data.reviews.push(nextReview);
-      batch.set(doc(db, 'reviews', nextReview.id), clean(nextReview));
+      this.data.reviews.push(review);
     }
-
-    batch.set(doc(db, 'reviews', review.id), clean(review));
-    await batch.commit();
-
-    await this.addAuditLog({
-      user_id: modifierName, user_name: modifierName,
-      action: '6-თვიანი გადასინჯვის ჩატარება', entity_type: 'CaseReview', entity_id: reviewId,
-      person_name: `${person.first_name} ${person.last_name}`,
-      person_personal_number: person.personal_number,
-      new_values: { review, program_decision: data.program_decision },
-      reason: '6-თვიანი გეგმიური გადასინჯვა',
-    });
-    return this.enrichPerson(person);
+    return this.markReviewDone(review, person, modifierName);
   }
 
   // ==================== LOCK / ARCHIVE ====================
@@ -844,6 +884,212 @@ class FirestoreStore {
     return this.enrichPerson(person);
   }
 
+  // ==================== FOSTER PARENTS (მიმღები მშობლები) ====================
+
+  /** მიმღები მშობლის აქტიური ბავშვები (რეალური მიმაგრებებიდან). */
+  private activeChildrenOf(fosterParentId: string): Person[] {
+    return this.data.persons.filter(
+      (p) =>
+        p.foster_parent_id === fosterParentId &&
+        p.case_status !== 'არქივირებული'
+    );
+  }
+
+  public enrichFosterParent(fp: FosterParent): FosterParent {
+    const active_children = this.activeChildrenOf(fp.id).map((p) => this.enrichPerson(p));
+    const active_children_count = active_children.length;
+    return {
+      ...fp,
+      active_children,
+      active_children_count,
+      status: computeFosterStatus(active_children_count),
+    };
+  }
+
+  public getFosterParents(): FosterParent[] {
+    return (this.data.foster_parents || []).map((fp) => this.enrichFosterParent(fp));
+  }
+
+  public getFosterParentById(id: string): FosterParent | undefined {
+    const fp = this.data.foster_parents.find((f) => f.id === id);
+    return fp ? this.enrichFosterParent(fp) : undefined;
+  }
+
+  public async createFosterParent(data: any, modifierName: string): Promise<FosterParent> {
+    if (!data.first_name || !data.last_name) {
+      throw new Error('გთხოვთ, შეავსოთ მიმღები მშობლის სახელი და გვარი.');
+    }
+    const now = new Date().toISOString();
+    const fp: FosterParent = {
+      id: `fp_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+      first_name: data.first_name,
+      last_name: data.last_name,
+      personal_number: data.personal_number || '',
+      phone: data.phone || '',
+      address: data.address || '',
+      category: data.category === 'რეგულარული' ? 'რეგულარული' : 'გადაუდებელი',
+      children_limit_exception: !!data.children_limit_exception,
+      exception_reason: data.children_limit_exception ? data.exception_reason : undefined,
+      exception_granted_by: data.children_limit_exception ? modifierName : undefined,
+      exception_granted_at: data.children_limit_exception ? now : undefined,
+      created_by: modifierName,
+      created_at: now,
+      updated_at: now,
+    };
+    this.data.foster_parents.push(fp);
+    await this.persist('foster_parents', fp);
+    await this.addAuditLog({
+      user_id: modifierName, user_name: modifierName,
+      action: 'მიმღები მშობლის რეგისტრაცია', entity_type: 'FosterParent', entity_id: fp.id,
+      person_name: `${fp.first_name} ${fp.last_name}`,
+      new_values: { category: fp.category },
+    });
+    return this.enrichFosterParent(fp);
+  }
+
+  public async updateFosterParent(id: string, updates: any, modifierName: string): Promise<FosterParent> {
+    const fp = this.data.foster_parents.find((f) => f.id === id);
+    if (!fp) throw new Error('მიმღები მშობელი ვერ მოიძებნა.');
+    if (updates.first_name) fp.first_name = updates.first_name;
+    if (updates.last_name) fp.last_name = updates.last_name;
+    if (updates.personal_number !== undefined) fp.personal_number = updates.personal_number;
+    if (updates.phone !== undefined) fp.phone = updates.phone;
+    if (updates.address !== undefined) fp.address = updates.address;
+    if (updates.category) fp.category = updates.category === 'რეგულარული' ? 'რეგულარული' : 'გადაუდებელი';
+    fp.updated_by = modifierName;
+    fp.updated_at = new Date().toISOString();
+    await this.persist('foster_parents', fp);
+    await this.addAuditLog({
+      user_id: modifierName, user_name: modifierName,
+      action: 'მიმღები მშობლის რედაქტირება', entity_type: 'FosterParent', entity_id: id,
+      person_name: `${fp.first_name} ${fp.last_name}`, new_values: updates,
+    });
+    return this.enrichFosterParent(fp);
+  }
+
+  /** 4-ბავშვის ლიმიტის გამონაკლისის ჩართვა/გამორთვა (მხოლოდ admin — UI-ში შემოწმებული). */
+  public async setChildrenException(id: string, enabled: boolean, reason: string | undefined, modifierName: string): Promise<FosterParent> {
+    const fp = this.data.foster_parents.find((f) => f.id === id);
+    if (!fp) throw new Error('მიმღები მშობელი ვერ მოიძებნა.');
+    const now = new Date().toISOString();
+    fp.children_limit_exception = enabled;
+    if (enabled) {
+      fp.exception_reason = reason;
+      fp.exception_granted_by = modifierName;
+      fp.exception_granted_at = now;
+    } else {
+      fp.exception_reason = undefined;
+      fp.exception_granted_by = undefined;
+      fp.exception_granted_at = undefined;
+    }
+    fp.updated_by = modifierName;
+    fp.updated_at = now;
+    await this.persist('foster_parents', fp);
+    await this.addAuditLog({
+      user_id: modifierName, user_name: modifierName,
+      action: enabled ? 'ლიმიტის გამონაკლისის ჩართვა' : 'ლიმიტის გამონაკლისის გამორთვა',
+      entity_type: 'FosterParent', entity_id: id,
+      person_name: `${fp.first_name} ${fp.last_name}`, reason,
+    });
+    return this.enrichFosterParent(fp);
+  }
+
+  public async deleteFosterParent(id: string, modifierName: string): Promise<boolean> {
+    const fp = this.data.foster_parents.find((f) => f.id === id);
+    if (!fp) throw new Error('მიმღები მშობელი ვერ მოიძებნა.');
+    if (this.activeChildrenOf(id).length > 0) {
+      throw new Error('მიმღები მშობლის წაშლა შეუძლებელია — მას მიმაგრებული ჰყავს ბავშვ(ებ)ი. ჯერ მოხსენით ბავშვები.');
+    }
+    this.data.foster_parents = this.data.foster_parents.filter((f) => f.id !== id);
+    await this.persistDelete('foster_parents', id);
+    await this.addAuditLog({
+      user_id: modifierName, user_name: modifierName,
+      action: 'მიმღები მშობლის წაშლა', entity_type: 'FosterParent', entity_id: id,
+      person_name: `${fp.first_name} ${fp.last_name}`,
+    });
+    return true;
+  }
+
+  /**
+   * ბავშვის მიმღებ მშობელზე მიმაგრება — ლიმიტის აღსრულებით (store = ჩაწერის ერთადერთი გზა).
+   * აბრუნებს განახლებულ პიროვნებას.
+   */
+  public async attachChild(childId: string, fosterParentId: string, modifierName: string): Promise<Person> {
+    const person = this.data.persons.find((p) => p.id === childId);
+    if (!person) throw new Error('ბავშვის ჩანაწერი ვერ მოიძებნა.');
+    const fp = this.data.foster_parents.find((f) => f.id === fosterParentId);
+    if (!fp) throw new Error('არჩეული მიმღები მშობელი ვერ მოიძებნა.');
+
+    if (person.foster_parent_id === fosterParentId) {
+      return this.enrichPerson(person); // უკვე მიმაგრებულია
+    }
+
+    const currentCount = this.activeChildrenOf(fosterParentId).length;
+    if (!canAttachChild(currentCount, fp.children_limit_exception)) {
+      throw new Error(`ამ მიმღებ მშობელს უკვე ჰყავს დაშვებული მაქსიმალური რაოდენობის — ${MAX_FOSTER_CHILDREN} ბავშვი.`);
+    }
+
+    const now = new Date().toISOString();
+    person.foster_parent_id = fosterParentId;
+    person.updated_by = modifierName;
+    person.updated_at = now;
+
+    // მიმდინარე placement-ზეც აისახოს (ისტორიისთვის)
+    const current = this.data.placements
+      .filter((p) => p.person_id === childId)
+      .sort((a, b) => (b.start_date > a.start_date ? 1 : -1))
+      .find((p) => p.placement_status === 'აქტიური');
+    const batch = writeBatch(db);
+    if (current) {
+      current.foster_parent_id = fosterParentId;
+      current.foster_parent_name = `${fp.first_name} ${fp.last_name}`;
+      current.updated_by = modifierName;
+      current.updated_at = now;
+      batch.set(doc(db, 'placements', current.id), clean(current));
+    }
+    batch.set(doc(db, 'persons', person.id), clean(person));
+    await batch.commit();
+
+    await this.addAuditLog({
+      user_id: modifierName, user_name: modifierName,
+      action: 'ბავშვის მიმაგრება მიმღებ მშობელზე', entity_type: 'Person', entity_id: childId,
+      person_name: `${person.first_name} ${person.last_name}`,
+      person_personal_number: person.personal_number,
+      new_values: { foster_parent_id: fosterParentId, foster_parent: `${fp.first_name} ${fp.last_name}` },
+      reason: `მიემაგრა: ${fp.first_name} ${fp.last_name}`,
+    });
+    return this.enrichPerson(person);
+  }
+
+  /** ბავშვის მოხსნა მიმღები მშობლისგან. */
+  public async detachChild(childId: string, modifierName: string): Promise<Person> {
+    const person = this.data.persons.find((p) => p.id === childId);
+    if (!person) throw new Error('ბავშვის ჩანაწერი ვერ მოიძებნა.');
+    const oldFpId = person.foster_parent_id;
+    if (!oldFpId) return this.enrichPerson(person);
+
+    person.foster_parent_id = undefined;
+    person.updated_by = modifierName;
+    person.updated_at = new Date().toISOString();
+    await this.persist('persons', person);
+
+    const oldFp = this.data.foster_parents.find((f) => f.id === oldFpId);
+    await this.addAuditLog({
+      user_id: modifierName, user_name: modifierName,
+      action: 'ბავშვის მოხსნა მიმღები მშობლისგან', entity_type: 'Person', entity_id: childId,
+      person_name: `${person.first_name} ${person.last_name}`,
+      person_personal_number: person.personal_number,
+      reason: oldFp ? `მოიხსნა: ${oldFp.first_name} ${oldFp.last_name}` : undefined,
+    });
+    return this.enrichPerson(person);
+  }
+
+  /** ბავშვის ერთი მშობლიდან მეორეზე გადაყვანა (ორივე მშობლის მდგომარეობა განახლდება). */
+  public async transferChild(childId: string, newFosterParentId: string, modifierName: string): Promise<Person> {
+    await this.detachChild(childId, modifierName);
+    return this.attachChild(childId, newFosterParentId, modifierName);
+  }
+
   // ==================== ENRICHMENT ====================
   public enrichPerson(person: Person): Person {
     const today = getTodayTbilisiISO();
@@ -869,6 +1115,14 @@ class FirestoreStore {
       else if (daysToReview <= 30) next_review.status = 'გადასახედი';
       else next_review.status = 'დაგეგმილი';
     }
+
+    // გადასინჯვის მდგომარეობა — მიმდინარე პროგრამის შესრულებული გადასინჯვა
+    const doneReview = personReviews
+      .filter((r) => r.status === 'შესრულებული' && (!current_placement || r.placement_id === current_placement.id))
+      .sort((a, b) => ((b.performed_at || '') > (a.performed_at || '') ? 1 : -1))[0];
+    const review_done = !!doneReview;
+    const reviewed_at = doneReview?.performed_at;
+    const reviewed_by = doneReview?.performed_by;
 
     let days_remaining_in_placement: number | undefined;
     let days_overdue: number | undefined;
@@ -903,6 +1157,7 @@ class FirestoreStore {
       extensions_history: personExtensions, next_review, reviews_history: personReviews,
       calculated_age, adulthood_date, days_until_adulthood, age_21_date, days_until_21,
       days_remaining_in_placement, days_overdue, reminder_status,
+      review_done, reviewed_at, reviewed_by,
     };
   }
 

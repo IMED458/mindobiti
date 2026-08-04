@@ -16,7 +16,7 @@ import {
   User as UserIcon,
   CheckCircle2,
 } from 'lucide-react';
-import { Person, User, PlacementType, PersonStatus, SmallFamilyHome } from '../types';
+import { Person, User, PlacementType, PersonStatus, SmallFamilyHome, FosterParent } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
 import { formatDateToGeorgian, addDaysISO } from '../utils';
 import { api } from '../api';
@@ -72,11 +72,28 @@ export const PersonDetailView: React.FC<PersonDetailViewProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Small Family Homes dictionary (გადაყვანისთვის)
+  // Small Family Homes + Foster Parents dictionaries (გადაყვანისთვის)
   const [smallHomes, setSmallHomes] = useState<SmallFamilyHome[]>([]);
+  const [fosterParents, setFosterParents] = useState<FosterParent[]>([]);
   useEffect(() => {
     api.getSmallHomes().then(setSmallHomes).catch(() => {});
+    api.getFosterParents().then(setFosterParents).catch(() => {});
   }, []);
+
+  // ერთი დაწკაპებით გადასინჯვა
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const handleReview = async () => {
+    setReviewLoading(true);
+    setError(null);
+    try {
+      await api.reviewPerson(person.id);
+      onRefresh();
+    } catch (err: any) {
+      setError(err.message || 'გადასინჯვისას დაფიქსირდა შეცდომა');
+    } finally {
+      setReviewLoading(false);
+    }
+  };
 
   // Transition Form
   const [transType, setTransType] = useState<PlacementType>('რეგულარული მინდობითი აღზრდა');
@@ -386,10 +403,19 @@ export const PersonDetailView: React.FC<PersonDetailViewProps> = ({
             <div className="space-y-6">
               {/* Active Placement Overview */}
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-2 gap-2 flex-wrap">
                   <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">მიმდინარე აქტიური პროგრამა</span>
-                  <StatusBadge type="reminder" value={person.reminder_status || 'ნორმალური'} count={person.days_overdue} />
+                  <div className="flex items-center gap-2">
+                    <StatusBadge type="review" value={person.review_done ? 'შესრულებული' : 'გადასასინჯი'} />
+                    <StatusBadge type="reminder" value={person.reminder_status || 'ნორმალური'} count={person.days_overdue} />
+                  </div>
                 </div>
+                {person.review_done && (
+                  <div className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1.5">
+                    გადასინჯვა შესრულებულია — {person.reviewed_by || 'უცნობი'}
+                    {person.reviewed_at ? ` · ${new Date(person.reviewed_at).toLocaleString('ka-GE')}` : ''}
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
                   <div>
@@ -434,6 +460,21 @@ export const PersonDetailView: React.FC<PersonDetailViewProps> = ({
                 )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {/* Review Button (ერთი დაწკაპებით) */}
+                  <button
+                    disabled={(isLocked && !isAdmin) || reviewLoading || person.review_done}
+                    onClick={handleReview}
+                    className="p-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 font-semibold text-xs rounded-xl border border-emerald-200 transition text-left flex items-center justify-between cursor-pointer disabled:opacity-40"
+                  >
+                    <div>
+                      <span className="block font-bold">{person.review_done ? 'გადასინჯვა შესრულებულია' : 'გადასინჯვა'}</span>
+                      <span className="text-[11px] font-normal text-emerald-700">
+                        {person.review_done ? 'ხელახლა აღარ არის საჭირო' : 'შემოწმდა — ყველაფერი წესრიგშია'}
+                      </span>
+                    </div>
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                  </button>
+
                   {/* Extension Button */}
                   <button
                     disabled={isLocked && !isAdmin}
@@ -802,6 +843,7 @@ export const PersonDetailView: React.FC<PersonDetailViewProps> = ({
                   data={transProgData}
                   onChange={(patch) => setTransProgData((prev) => ({ ...prev, ...patch }))}
                   smallHomes={smallHomes}
+                  fosterParents={fosterParents}
                 />
               </div>
 

@@ -9,11 +9,41 @@ export type NavTab =
   | 'age18'
   | 'age21'
   | 'small_homes'
+  | 'foster_parents'
   | 'reports'
   | 'users'
   | 'settings'
   | 'audit'
   | 'guide';
+
+// მიმღები მშობელი
+export type FosterParentStatus = 'რეგისტრირებული' | 'დაქირავებული';
+export type FosterCategory = 'გადაუდებელი' | 'რეგულარული';
+
+export const MAX_FOSTER_CHILDREN = 4;
+
+export interface FosterParent {
+  id: string;
+  first_name: string;
+  last_name: string;
+  personal_number: string;
+  phone?: string;
+  address?: string;
+  category: FosterCategory;
+  children_limit_exception: boolean;
+  exception_reason?: string;
+  exception_granted_by?: string;
+  exception_granted_at?: string;
+  created_by: string;
+  created_at: string;
+  updated_by?: string;
+  updated_at?: string;
+
+  // დინამიკურად გამოთვლილი (client-side)
+  active_children?: Person[];
+  active_children_count?: number;
+  status?: FosterParentStatus;
+}
 
 export interface User {
   id: string;
@@ -75,6 +105,7 @@ export interface Placement {
   comment?: string;
 
   // Dynamic program-specific fields
+  foster_parent_id?: string; // მიმღები მშობლის reference (foster_parents კოლექცია)
   foster_parent_name?: string; // მინდობით აღმზრდელის / ნათესავის სახელი და გვარი
   foster_parent_personal_number?: string; // მიმღები მშობლის პირადი ნომერი
   foster_parent_phone?: string; // მიმღები მშობლის ტელეფონი
@@ -136,6 +167,7 @@ export interface CaseReview {
   person_id: string;
   placement_id: string;
   review_number: number; // 1, 2, 3...
+  placement_type?: string; // ინფორმაციული — რომელ პროგრამას შეესაბამება
   due_date: string; // ISO YYYY-MM-DD
   review_date?: string; // Actual date performed
   status: CaseReviewStatus;
@@ -175,7 +207,10 @@ export interface Person {
   archived_at?: string;
   archived_by?: string;
   archive_reason?: string;
-  
+
+  // მიმღები მშობლის რეალური კავშირი (reference მშობლის id-ზე)
+  foster_parent_id?: string;
+
   // Dynamic computed fields returned by server
   current_placement?: Placement;
   placements_history?: Placement[];
@@ -190,6 +225,11 @@ export interface Person {
   days_remaining_in_placement?: number;
   days_overdue?: number;
   reminder_status?: 'ნორმალური' | 'გასაგრძელებელი' | 'კრიტიკული' | 'ვადაგადაცილებული';
+
+  // გადასინჯვის დინამიკური მდგომარეობა
+  review_done?: boolean;
+  reviewed_at?: string;
+  reviewed_by?: string;
 }
 
 export interface SystemSettings {

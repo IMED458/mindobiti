@@ -2,10 +2,11 @@
 // რეგისტრაციაშიც (RegisterPersonView) და გადაყვანაშიც (PersonDetailView).
 // ამით გარანტირებულია, რომ ორივე ადგილას ზუსტად ერთი და იგივე ველები იხსნება.
 import React from 'react';
-import { PlacementType, SmallFamilyHome, ContactPerson } from '../types';
+import { PlacementType, SmallFamilyHome, ContactPerson, FosterParent } from '../types';
 
 export interface ProgramData {
   // Foster (გადაუდებელი / რეგულარული / ნათესაური)
+  fosterParentId: string; // რეალური კავშირი foster_parents-ზე (არასავალდებულო)
   fosterName: string;
   fosterPersonalNumber: string;
   fosterPhone: string;
@@ -27,6 +28,7 @@ export interface ProgramData {
 export function emptyProgramData(): ProgramData {
   const today = new Date().toISOString().split('T')[0];
   return {
+    fosterParentId: '',
     fosterName: '',
     fosterPersonalNumber: '',
     fosterPhone: '',
@@ -65,6 +67,7 @@ export function buildPlacementPatch(
 ): Record<string, any> {
   const patch: Record<string, any> = {};
   if (program === 'გადაუდებელი მინდობითი აღზრდა' || program === 'რეგულარული მინდობითი აღზრდა') {
+    patch.foster_parent_id = d.fosterParentId || undefined;
     patch.foster_parent_name = d.fosterName;
     patch.foster_parent_personal_number = d.fosterPersonalNumber;
     patch.foster_parent_phone = d.fosterPhone;
@@ -73,6 +76,7 @@ export function buildPlacementPatch(
     patch.contract_date = d.contractDate;
     patch.location_or_organization = `მინდობითი ოჯახი: ${d.fosterName}`;
   } else if (program === 'ნათესაური მინდობითი აღზრდა') {
+    patch.foster_parent_id = d.fosterParentId || undefined;
     patch.foster_parent_name = d.fosterName;
     patch.foster_parent_personal_number = d.fosterPersonalNumber;
     patch.foster_parent_phone = d.fosterPhone;
@@ -136,16 +140,58 @@ interface Props {
   data: ProgramData;
   onChange: (patch: Partial<ProgramData>) => void;
   smallHomes: SmallFamilyHome[];
+  fosterParents?: FosterParent[];
 }
 
 const inputCls = 'w-full p-2.5 border border-slate-300 rounded-xl';
 
-export const ProgramSpecificFields: React.FC<Props> = ({ program, data, onChange, smallHomes }) => {
+export const ProgramSpecificFields: React.FC<Props> = ({ program, data, onChange, smallHomes, fosterParents = [] }) => {
   const set = (patch: Partial<ProgramData>) => onChange(patch);
+
+  // რეგისტრირებული მიმღები მშობლიდან არჩევა → ავსებს ველებს + ამყარებს რეალურ კავშირს
+  const FosterParentPicker = () => {
+    if (fosterParents.length === 0) return null;
+    return (
+      <div className="sm:col-span-2 lg:col-span-3">
+        <label className="block font-semibold text-slate-700 mb-1">
+          მიმღები მშობლის არჩევა ბაზიდან (რეალური კავშირი)
+        </label>
+        <select
+          value={data.fosterParentId}
+          onChange={(e) => {
+            const fp = fosterParents.find((f) => f.id === e.target.value);
+            if (fp) {
+              set({
+                fosterParentId: fp.id,
+                fosterName: `${fp.first_name} ${fp.last_name}`,
+                fosterPersonalNumber: fp.personal_number || data.fosterPersonalNumber,
+                fosterPhone: fp.phone || data.fosterPhone,
+                fosterAddress: fp.address || data.fosterAddress,
+              });
+            } else {
+              set({ fosterParentId: '' });
+            }
+          }}
+          className={`${inputCls} font-medium`}
+        >
+          <option value="">— ხელით შევსება (კავშირის გარეშე) —</option>
+          {fosterParents.map((fp) => (
+            <option key={fp.id} value={fp.id}>
+              {fp.first_name} {fp.last_name} · {fp.category} · {fp.status} ({fp.active_children_count ?? 0} ბავშვი)
+            </option>
+          ))}
+        </select>
+        <p className="text-[10px] text-slate-500 mt-1">
+          თუ მშობელს აქ აირჩევთ, ბავშვი რეალურად მიება მას და ჩაითვლება ლიმიტში.
+        </p>
+      </div>
+    );
+  };
 
   if (program === 'გადაუდებელი მინდობითი აღზრდა' || program === 'რეგულარული მინდობითი აღზრდა') {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+        <FosterParentPicker />
         <div>
           <label className="block font-semibold text-slate-700 mb-1">მიმღები მშობლის სახელი და გვარი *</label>
           <input type="text" value={data.fosterName} onChange={(e) => set({ fosterName: e.target.value })}
@@ -184,6 +230,7 @@ export const ProgramSpecificFields: React.FC<Props> = ({ program, data, onChange
   if (program === 'ნათესაური მინდობითი აღზრდა') {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+        <FosterParentPicker />
         <div>
           <label className="block font-semibold text-slate-700 mb-1">ნათესავი აღმზრდელის სახელი და გვარი *</label>
           <input type="text" value={data.fosterName} onChange={(e) => set({ fosterName: e.target.value })}

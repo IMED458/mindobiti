@@ -8,6 +8,7 @@ import {
   CalendarDays,
   Sparkles,
   Home,
+  HeartHandshake,
   FileSpreadsheet,
   UserCog,
   Sliders,
@@ -77,6 +78,7 @@ export const Navigation: React.FC<NavigationProps> = ({
     {
       title: 'ცნობარები & ანგარიშები',
       items: [
+        { id: 'foster_parents' as NavTab, label: 'მიმღები მშობლები', icon: HeartHandshake },
         { id: 'small_homes' as NavTab, label: 'მცირე საოჯახო სახლები', icon: Home },
         { id: 'reports' as NavTab, label: 'რეპორტინგი & ექსპორტი', icon: FileSpreadsheet },
       ],

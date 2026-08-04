@@ -12,6 +12,7 @@ import { RenewalsView } from './views/RenewalsView';
 import { ReviewsView } from './views/ReviewsView';
 import { AdulthoodView } from './views/AdulthoodView';
 import { SmallFamilyHomesView } from './views/SmallFamilyHomesView';
+import { FosterParentsView } from './views/FosterParentsView';
 import { ReportsView } from './views/ReportsView';
 import { UserManagementView } from './views/UserManagementView';
 import { SettingsView } from './views/SettingsView';
@@ -230,6 +231,15 @@ export function App() {
               user={currentUser}
               persons={persons}
               onSelectPerson={setSelectedPerson}
+            />
+          )}
+
+          {activeTab === 'foster_parents' && (
+            <FosterParentsView
+              user={currentUser}
+              persons={persons}
+              onSelectPerson={setSelectedPerson}
+              onRefresh={refreshData}
             />
           )}
 

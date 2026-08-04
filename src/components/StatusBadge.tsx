@@ -1,8 +1,8 @@
 import React from 'react';
-import { Lock, AlertTriangle, AlertOctagon, Clock, CheckCircle2, Calendar, FileText } from 'lucide-react';
+import { Lock, AlertTriangle, AlertOctagon, Clock, CheckCircle2, Calendar, ShieldAlert, HeartHandshake, UserCheck } from 'lucide-react';
 
 interface StatusBadgeProps {
-  type: 'reminder' | 'placement' | 'lock' | 'adulthood' | 'person_status';
+  type: 'reminder' | 'placement' | 'lock' | 'adulthood' | 'person_status' | 'foster_status' | 'foster_category' | 'review';
   value: string;
   count?: number;
   showIcon?: boolean;
@@ -71,6 +71,45 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ type, value, count, sh
     return (
       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${colorClasses}`}>
         {value}
+      </span>
+    );
+  }
+
+  if (type === 'foster_status') {
+    const hired = value === 'დაქირავებული';
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold border ${
+        hired ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : 'bg-slate-100 text-slate-700 border-slate-300'
+      }`}>
+        {showIcon && <UserCheck className={`w-3.5 h-3.5 ${hired ? 'text-emerald-600' : 'text-slate-500'} shrink-0`} />}
+        <span>{value}</span>
+      </span>
+    );
+  }
+
+  if (type === 'foster_category') {
+    const emergency = value === 'გადაუდებელი';
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold border ${
+        emergency ? 'bg-amber-50 text-amber-800 border-amber-300' : 'bg-blue-50 text-blue-800 border-blue-200'
+      }`}>
+        {showIcon && (emergency ? <ShieldAlert className="w-3.5 h-3.5 text-amber-600 shrink-0" /> : <HeartHandshake className="w-3.5 h-3.5 text-blue-600 shrink-0" />)}
+        <span>{value}</span>
+      </span>
+    );
+  }
+
+  if (type === 'review') {
+    const done = value === 'შესრულებული' || value === 'გადასინჯვა შესრულებულია';
+    return done ? (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-300">
+        {showIcon && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+        <span>გადასინჯვა შესრულებულია</span>
+      </span>
+    ) : (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+        {showIcon && <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />}
+        <span>გადასასინჯი</span>
       </span>
     );
   }
