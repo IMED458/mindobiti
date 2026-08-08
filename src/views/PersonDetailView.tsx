@@ -141,6 +141,47 @@ export const PersonDetailView: React.FC<PersonDetailViewProps> = ({
   const [editAdmissionReason, setEditAdmissionReason] = useState(person.admission_reason);
   const [editAdmissionSource, setEditAdmissionSource] = useState(person.admission_source);
   const [editPersonStatus, setEditPersonStatus] = useState<PersonStatus>(person.person_status);
+  const [editCaseManager, setEditCaseManager] = useState(person.case_manager || '');
+  const [editAdoptionStatus, setEditAdoptionStatus] = useState<string>(person.adoption_status || '');
+
+  // გაშვილებაზე გადაყვანის მოდალი
+  const [showAdoptModal, setShowAdoptModal] = useState(false);
+  const [af, setAf] = useState({
+    first_name: '', last_name: '', personal_number: '', passport_number: '',
+    spouse_name: '', spouse_personal_number: '', spouse_passport_number: '',
+    address: '', phone: '', decision_number: '', adoption_date: new Date().toISOString().split('T')[0],
+  });
+
+  const handleAdoptSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!af.first_name || !af.last_name) {
+      setError('გთხოვთ, მიუთითოთ მშვილებელი ოჯახის სახელი და გვარი.');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      await api.updatePerson(person.id, {
+        adoption_status: 'გაშვილებული',
+        adoptive_family: {
+          first_name: af.first_name, last_name: af.last_name,
+          personal_number: af.personal_number, passport_number: af.passport_number,
+          spouse_name: af.spouse_name || undefined,
+          spouse_personal_number: af.spouse_personal_number || undefined,
+          spouse_passport_number: af.spouse_passport_number || undefined,
+          address: af.address || undefined, phone: af.phone || undefined,
+          decision_number: af.decision_number || undefined,
+          adoption_date: af.adoption_date || undefined,
+        },
+      } as any);
+      setShowAdoptModal(false);
+      onRefresh();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Transition Handler
   const handleTransitionSubmit = async (e: React.FormEvent) => {
@@ -288,7 +329,9 @@ export const PersonDetailView: React.FC<PersonDetailViewProps> = ({
         admission_reason: editAdmissionReason,
         admission_source: editAdmissionSource,
         person_status: editPersonStatus,
-      });
+        case_manager: editCaseManager,
+        adoption_status: (editAdoptionStatus || undefined) as any,
+      } as any);
       setShowEditModal(false);
       onRefresh();
     } catch (err: any) {
@@ -313,6 +356,15 @@ export const PersonDetailView: React.FC<PersonDetailViewProps> = ({
               ) : (
                 <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                   ქეისი ღიაა
+                </span>
+              )}
+              {person.adoption_status && (
+                <span className={`px-2 py-0.5 rounded-md text-xs font-bold border ${
+                  person.adoption_status === 'გაშვილებული'
+                    ? 'bg-purple-500/20 text-purple-200 border-purple-400/40'
+                    : 'bg-amber-500/20 text-amber-200 border-amber-400/40'
+                }`}>
+                  {person.adoption_status}
                 </span>
               )}
             </div>
@@ -531,6 +583,21 @@ export const PersonDetailView: React.FC<PersonDetailViewProps> = ({
                     <UserCheck className="w-5 h-5 text-emerald-600" />
                   </button>
 
+                  {/* Adoption transition (გასაშვილებელი → გაშვილებული) */}
+                  {person.adoption_status === 'გასაშვილებელი' && (
+                    <button
+                      disabled={isLocked && !isAdmin}
+                      onClick={() => { setAf({ ...af, adoption_date: new Date().toISOString().split('T')[0] }); setError(null); setShowAdoptModal(true); }}
+                      className="p-3 bg-purple-50 hover:bg-purple-100 text-purple-900 font-semibold text-xs rounded-xl border border-purple-200 transition text-left flex items-center justify-between cursor-pointer disabled:opacity-40"
+                    >
+                      <div>
+                        <span className="block font-bold">გაშვილებაზე გადაყვანა</span>
+                        <span className="text-[11px] font-normal text-purple-600">მშვილებელი ოჯახის რეგისტრაცია</span>
+                      </div>
+                      <UserCheck className="w-5 h-5 text-purple-600" />
+                    </button>
+                  )}
+
                   {/* Edit Person Details */}
                   <button
                     disabled={isLocked && !isAdmin}
@@ -630,7 +697,64 @@ export const PersonDetailView: React.FC<PersonDetailViewProps> = ({
                   <span className="text-slate-500 font-semibold block">ჩარიცხვის მიზეზი:</span>
                   <span className="text-slate-800">{person.admission_reason}</span>
                 </div>
+
+                <div>
+                  <span className="text-slate-500 font-semibold block">ქეის მენეჯერი (სოც. მუშაკი):</span>
+                  <span className="font-bold text-slate-900">{person.case_manager || '—'}</span>
+                </div>
+
+                <div>
+                  <span className="text-slate-500 font-semibold block">სამშვილებლო სტატუსი:</span>
+                  <span className="font-bold text-slate-900">{person.adoption_status || 'არ არის'}</span>
+                </div>
               </div>
+
+              {/* მშვილებელი ოჯახი (თუ გაშვილებულია) */}
+              {person.adoption_status === 'გაშვილებული' && person.adoptive_family && (
+                <div className="bg-purple-50/50 p-4 rounded-xl border border-purple-200">
+                  <h4 className="font-bold text-purple-900 mb-2">მშვილებელი ოჯახის მონაცემები</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <span className="text-slate-500 block">მშვილებელი:</span>
+                      <span className="font-bold text-slate-900">{person.adoptive_family.first_name} {person.adoptive_family.last_name}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">პირადი № / პასპორტი:</span>
+                      <span className="font-mono font-bold text-slate-900">{person.adoptive_family.personal_number || '—'} / {person.adoptive_family.passport_number || '—'}</span>
+                    </div>
+                    {person.adoptive_family.spouse_name && (
+                      <div>
+                        <span className="text-slate-500 block">მეუღლე:</span>
+                        <span className="font-bold text-slate-900">{person.adoptive_family.spouse_name}</span>
+                      </div>
+                    )}
+                    {person.adoptive_family.phone && (
+                      <div>
+                        <span className="text-slate-500 block">ტელეფონი:</span>
+                        <span className="font-bold text-slate-900">{person.adoptive_family.phone}</span>
+                      </div>
+                    )}
+                    {person.adoptive_family.address && (
+                      <div>
+                        <span className="text-slate-500 block">მისამართი:</span>
+                        <span className="text-slate-800">{person.adoptive_family.address}</span>
+                      </div>
+                    )}
+                    {person.adoptive_family.decision_number && (
+                      <div>
+                        <span className="text-slate-500 block">გადაწყვეტილება №:</span>
+                        <span className="text-slate-800">{person.adoptive_family.decision_number}</span>
+                      </div>
+                    )}
+                    {person.adoptive_family.adoption_date && (
+                      <div>
+                        <span className="text-slate-500 block">გაშვილების თარიღი:</span>
+                        <span className="font-bold text-slate-900">{formatDateToGeorgian(person.adoptive_family.adoption_date)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Contact Person Details */}
               <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-200">
@@ -1112,6 +1236,28 @@ export const PersonDetailView: React.FC<PersonDetailViewProps> = ({
                 </select>
               </div>
 
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">ქეის მენეჯერი (სოც. მუშაკი)</label>
+                  <input type="text" value={editCaseManager} onChange={(e) => setEditCaseManager(e.target.value)}
+                    placeholder="მაგ: ნინო ბერიძე" className="w-full p-2 border border-slate-300 rounded-lg" />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">სამშვილებლო სტატუსი</label>
+                  <select value={editAdoptionStatus} onChange={(e) => setEditAdoptionStatus(e.target.value)}
+                    className="w-full p-2 border border-slate-300 rounded-lg">
+                    <option value="">— არ არის —</option>
+                    <option value="გასაშვილებელი">გასაშვილებელი</option>
+                    <option value="გაშვილებული">გაშვილებული</option>
+                  </select>
+                </div>
+              </div>
+              {editAdoptionStatus === 'გაშვილებული' && !person.adoptive_family && (
+                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                  „გაშვილებულ"-ზე მშვილებელი ოჯახის მონაცემები დაამატეთ „გაშვილებაზე გადაყვანის" ღილაკით (მოქმედებების ჩანართში).
+                </p>
+              )}
+
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">საიდან ჩაირიცხა</label>
                 <input
@@ -1208,6 +1354,82 @@ export const PersonDetailView: React.FC<PersonDetailViewProps> = ({
                   className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-xs cursor-pointer transition disabled:opacity-40"
                 >
                   {loading ? 'იშლება...' : 'სამუდამოდ წაშლა'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL 7: ADOPTION (გასაშვილებელი → გაშვილებული) --- */}
+      {showAdoptModal && (
+        <div className="fixed inset-0 z-60 bg-slate-950/80 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full p-6 space-y-4 max-h-[92vh] overflow-y-auto">
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <UserCheck className="w-5 h-5 text-purple-600" />
+              <span>გაშვილებაზე გადაყვანა — მშვილებელი ოჯახის საპასპორტე მონაცემები</span>
+            </h3>
+            {error && (
+              <div className="p-2.5 bg-rose-50 text-rose-700 text-xs rounded-lg flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" /><span>{error}</span>
+              </div>
+            )}
+            <form onSubmit={handleAdoptSubmit} className="space-y-3 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">მშვილებლის სახელი *</label>
+                  <input type="text" value={af.first_name} onChange={(e) => setAf({ ...af, first_name: e.target.value })} className="w-full p-2.5 border border-slate-300 rounded-xl" />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">მშვილებლის გვარი *</label>
+                  <input type="text" value={af.last_name} onChange={(e) => setAf({ ...af, last_name: e.target.value })} className="w-full p-2.5 border border-slate-300 rounded-xl" />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">პირადი ნომერი</label>
+                  <input type="text" maxLength={11} value={af.personal_number} onChange={(e) => setAf({ ...af, personal_number: e.target.value.replace(/\D/g, '') })} className="w-full p-2.5 border border-slate-300 rounded-xl font-mono" />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">პასპორტის ნომერი</label>
+                  <input type="text" value={af.passport_number} onChange={(e) => setAf({ ...af, passport_number: e.target.value })} className="w-full p-2.5 border border-slate-300 rounded-xl font-mono" />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">მეუღლის სახელი და გვარი</label>
+                  <input type="text" value={af.spouse_name} onChange={(e) => setAf({ ...af, spouse_name: e.target.value })} className="w-full p-2.5 border border-slate-300 rounded-xl" />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">მეუღლის პირადი №</label>
+                  <input type="text" maxLength={11} value={af.spouse_personal_number} onChange={(e) => setAf({ ...af, spouse_personal_number: e.target.value.replace(/\D/g, '') })} className="w-full p-2.5 border border-slate-300 rounded-xl font-mono" />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">მეუღლის პასპორტის №</label>
+                  <input type="text" value={af.spouse_passport_number} onChange={(e) => setAf({ ...af, spouse_passport_number: e.target.value })} className="w-full p-2.5 border border-slate-300 rounded-xl font-mono" />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">ტელეფონი</label>
+                  <input type="text" value={af.phone} onChange={(e) => setAf({ ...af, phone: e.target.value })} className="w-full p-2.5 border border-slate-300 rounded-xl" />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">მისამართი</label>
+                  <input type="text" value={af.address} onChange={(e) => setAf({ ...af, address: e.target.value })} className="w-full p-2.5 border border-slate-300 rounded-xl" />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">გადაწყვეტილების/ბრძანების №</label>
+                  <input type="text" value={af.decision_number} onChange={(e) => setAf({ ...af, decision_number: e.target.value })} className="w-full p-2.5 border border-slate-300 rounded-xl" />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">გაშვილების თარიღი</label>
+                  <input type="date" value={af.adoption_date} onChange={(e) => setAf({ ...af, adoption_date: e.target.value })} className="w-full p-2.5 border border-slate-300 rounded-xl" />
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => setShowAdoptModal(false)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 font-semibold text-slate-700 rounded-xl cursor-pointer">
+                  გაუქმება
+                </button>
+                <button type="submit" disabled={loading}
+                  className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl cursor-pointer disabled:opacity-50">
+                  {loading ? 'ინახება...' : 'გაშვილების დადასტურება'}
                 </button>
               </div>
             </form>

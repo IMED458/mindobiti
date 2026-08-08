@@ -504,7 +504,11 @@ class FirestoreStore {
       personal_number: payload.personal_number, birth_date: payload.birth_date,
       admission_date: payload.admission_date, admission_reason: payload.admission_reason,
       admission_source: payload.admission_source, person_status: payload.person_status,
-      contact_person: payload.contact_person, case_status: 'აქტიური',
+      contact_person: payload.contact_person,
+      case_manager: payload.case_manager,
+      adoption_status: payload.adoption_status,
+      adoptive_family: payload.adoption_status === 'გაშვილებული' ? payload.adoptive_family : undefined,
+      case_status: 'აქტიური',
       is_locked: false, created_by: creatorName, created_at: now, updated_at: now,
     };
 
@@ -589,6 +593,16 @@ class FirestoreStore {
     if (updates.admission_source) person.admission_source = updates.admission_source;
     if (updates.person_status) person.person_status = updates.person_status;
     if (updates.contact_person) person.contact_person = updates.contact_person;
+    if (updates.case_manager !== undefined) person.case_manager = updates.case_manager;
+    if (updates.adoption_status !== undefined) {
+      person.adoption_status = updates.adoption_status || undefined;
+      // გასაშვილებელზე დაბრუნებისას მშვილებელი ოჯახის მონაცემები იშლება
+      if (person.adoption_status !== 'გაშვილებული') person.adoptive_family = undefined;
+    }
+    if (updates.adoptive_family !== undefined) {
+      person.adoptive_family = updates.adoptive_family;
+      if (updates.adoptive_family) person.adoption_status = 'გაშვილებული';
+    }
     person.updated_by = modifierName;
     person.updated_at = new Date().toISOString();
     await this.persist('persons', person);
@@ -928,6 +942,7 @@ class FirestoreStore {
       phone: data.phone || '',
       address: data.address || '',
       category: data.category === 'რეგულარული' ? 'რეგულარული' : 'გადაუდებელი',
+      is_adopter: !!data.is_adopter,
       children_limit_exception: !!data.children_limit_exception,
       exception_reason: data.children_limit_exception ? data.exception_reason : undefined,
       exception_granted_by: data.children_limit_exception ? modifierName : undefined,
@@ -956,6 +971,7 @@ class FirestoreStore {
     if (updates.phone !== undefined) fp.phone = updates.phone;
     if (updates.address !== undefined) fp.address = updates.address;
     if (updates.category) fp.category = updates.category === 'რეგულარული' ? 'რეგულარული' : 'გადაუდებელი';
+    if (updates.is_adopter !== undefined) fp.is_adopter = !!updates.is_adopter;
     fp.updated_by = modifierName;
     fp.updated_at = new Date().toISOString();
     await this.persist('foster_parents', fp);

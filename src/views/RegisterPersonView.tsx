@@ -42,6 +42,15 @@ export const RegisterPersonView: React.FC<RegisterPersonViewProps> = ({ onSucces
   const [admissionReason, setAdmissionReason] = useState('');
   const [admissionSource, setAdmissionSource] = useState('კახეთის რეგიონული ცენტრი');
   const [personStatus, setPersonStatus] = useState<PersonStatus>('ჯანმრთელი');
+  const [caseManager, setCaseManager] = useState('');
+
+  // სამშვილებლო სტატუსი
+  const [adoptionStatus, setAdoptionStatus] = useState<'' | 'გასაშვილებელი' | 'გაშვილებული'>('');
+  const [af, setAf] = useState({
+    first_name: '', last_name: '', personal_number: '', passport_number: '',
+    spouse_name: '', spouse_personal_number: '', spouse_passport_number: '',
+    address: '', phone: '', decision_number: '', adoption_date: '',
+  });
 
   // Program Selection (Mandatory)
   const [selectedProgram, setSelectedProgram] = useState<PlacementType | ''>('');
@@ -99,6 +108,25 @@ export const RegisterPersonView: React.FC<RegisterPersonViewProps> = ({ onSucces
       return;
     }
 
+    if (adoptionStatus === 'გაშვილებული' && (!af.first_name || !af.last_name)) {
+      setError('გაშვილებულ ბავშვზე აუცილებელია მშვილებელი ოჯახის მონაცემები (სახელი და გვარი).');
+      return;
+    }
+
+    const adoptiveFamily =
+      adoptionStatus === 'გაშვილებული'
+        ? {
+            first_name: af.first_name, last_name: af.last_name,
+            personal_number: af.personal_number, passport_number: af.passport_number,
+            spouse_name: af.spouse_name || undefined,
+            spouse_personal_number: af.spouse_personal_number || undefined,
+            spouse_passport_number: af.spouse_passport_number || undefined,
+            address: af.address || undefined, phone: af.phone || undefined,
+            decision_number: af.decision_number || undefined,
+            adoption_date: af.adoption_date || undefined,
+          }
+        : undefined;
+
     const initialPlacement: any = {
       placement_type: selectedProgram,
       start_date: admissionDate,
@@ -121,6 +149,9 @@ export const RegisterPersonView: React.FC<RegisterPersonViewProps> = ({ onSucces
         admission_source: admissionSource,
         person_status: personStatus,
         contact_person: contactPerson,
+        case_manager: caseManager || undefined,
+        adoption_status: adoptionStatus || undefined,
+        adoptive_family: adoptiveFamily,
         initial_placement: initialPlacement,
       });
       onSuccess();
@@ -217,6 +248,90 @@ export const RegisterPersonView: React.FC<RegisterPersonViewProps> = ({ onSucces
                 className="w-full p-2.5 border border-slate-300 rounded-xl" />
             </div>
           </div>
+        </div>
+
+        {/* SECTION 1b: ქეის მენეჯერი და სამშვილებლო სტატუსი */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
+          <h3 className="text-sm font-bold text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
+            <User className="w-4 h-4 text-emerald-600" />
+            <span>ქეის მენეჯერი და სამშვილებლო სტატუსი</span>
+          </h3>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">ქეის მენეჯერი (სოციალური მუშაკი)</label>
+              <input type="text" value={caseManager} onChange={(e) => setCaseManager(e.target.value)}
+                placeholder="მაგ: ნინო ბერიძე" className="w-full p-2.5 border border-slate-300 rounded-xl" />
+              <p className="text-[10px] text-slate-500 mt-1">ვინ მართავს ამ საქმეს.</p>
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">სამშვილებლო სტატუსი</label>
+              <select value={adoptionStatus} onChange={(e) => setAdoptionStatus(e.target.value as any)}
+                className="w-full p-2.5 border border-slate-300 rounded-xl font-medium">
+                <option value="">— არ არის —</option>
+                <option value="გასაშვილებელი">გასაშვილებელი</option>
+                <option value="გაშვილებული">გაშვილებული</option>
+              </select>
+            </div>
+          </div>
+
+          {adoptionStatus === 'გასაშვილებელი' && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900">
+              „გასაშვილებელი" ბავშვზე მიეთითება მხოლოდ ქეის მენეჯერი (იხ. ზემოთ). გაშვილების შემდეგ სტატუსი პროფილიდან შეიცვლება „გაშვილებულ"-ზე.
+            </div>
+          )}
+
+          {adoptionStatus === 'გაშვილებული' && (
+            <div className="p-4 bg-blue-50/50 border border-blue-200 rounded-xl space-y-3">
+              <p className="font-bold text-blue-900 text-xs">მშვილებელი ოჯახის საპასპორტე მონაცემები</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">მშვილებლის სახელი *</label>
+                  <input type="text" value={af.first_name} onChange={(e) => setAf({ ...af, first_name: e.target.value })} className="w-full p-2.5 border border-slate-300 rounded-xl" />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">მშვილებლის გვარი *</label>
+                  <input type="text" value={af.last_name} onChange={(e) => setAf({ ...af, last_name: e.target.value })} className="w-full p-2.5 border border-slate-300 rounded-xl" />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">პირადი ნომერი</label>
+                  <input type="text" maxLength={11} value={af.personal_number} onChange={(e) => setAf({ ...af, personal_number: e.target.value.replace(/\D/g, '') })} className="w-full p-2.5 border border-slate-300 rounded-xl font-mono" />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">პასპორტის ნომერი</label>
+                  <input type="text" value={af.passport_number} onChange={(e) => setAf({ ...af, passport_number: e.target.value })} className="w-full p-2.5 border border-slate-300 rounded-xl font-mono" />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">მეუღლის სახელი და გვარი</label>
+                  <input type="text" value={af.spouse_name} onChange={(e) => setAf({ ...af, spouse_name: e.target.value })} className="w-full p-2.5 border border-slate-300 rounded-xl" />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">მეუღლის პირადი №</label>
+                  <input type="text" maxLength={11} value={af.spouse_personal_number} onChange={(e) => setAf({ ...af, spouse_personal_number: e.target.value.replace(/\D/g, '') })} className="w-full p-2.5 border border-slate-300 rounded-xl font-mono" />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">მეუღლის პასპორტის №</label>
+                  <input type="text" value={af.spouse_passport_number} onChange={(e) => setAf({ ...af, spouse_passport_number: e.target.value })} className="w-full p-2.5 border border-slate-300 rounded-xl font-mono" />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">ტელეფონი</label>
+                  <input type="text" value={af.phone} onChange={(e) => setAf({ ...af, phone: e.target.value })} className="w-full p-2.5 border border-slate-300 rounded-xl" />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">მისამართი</label>
+                  <input type="text" value={af.address} onChange={(e) => setAf({ ...af, address: e.target.value })} className="w-full p-2.5 border border-slate-300 rounded-xl" />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">გადაწყვეტილების/ბრძანების №</label>
+                  <input type="text" value={af.decision_number} onChange={(e) => setAf({ ...af, decision_number: e.target.value })} className="w-full p-2.5 border border-slate-300 rounded-xl" />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">გაშვილების თარიღი</label>
+                  <input type="date" value={af.adoption_date} onChange={(e) => setAf({ ...af, adoption_date: e.target.value })} className="w-full p-2.5 border border-slate-300 rounded-xl" />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* SECTION 2: Mandatory Program Selection */}

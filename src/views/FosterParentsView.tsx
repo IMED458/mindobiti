@@ -23,7 +23,7 @@ interface Props {
   onRefresh: () => void;
 }
 
-type FilterKey = 'all' | 'registered' | 'hired' | 'emergency' | 'regular';
+type FilterKey = 'all' | 'registered' | 'hired' | 'adopter' | 'emergency' | 'regular';
 
 const emptyForm = () => ({
   first_name: '',
@@ -32,6 +32,7 @@ const emptyForm = () => ({
   phone: '',
   address: '',
   category: 'გადაუდებელი' as FosterCategory,
+  is_adopter: false,
   children_limit_exception: false,
   exception_reason: '',
 });
@@ -79,6 +80,7 @@ export const FosterParentsView: React.FC<Props> = ({ user, persons, onSelectPers
     }
     if (filter === 'registered') return fp.status === 'რეგისტრირებული';
     if (filter === 'hired') return fp.status === 'დაქირავებული';
+    if (filter === 'adopter') return !!fp.is_adopter;
     if (filter === 'emergency') return fp.category === 'გადაუდებელი';
     if (filter === 'regular') return fp.category === 'რეგულარული';
     return true;
@@ -100,6 +102,7 @@ export const FosterParentsView: React.FC<Props> = ({ user, persons, onSelectPers
       phone: fp.phone || '',
       address: fp.address || '',
       category: fp.category,
+      is_adopter: !!fp.is_adopter,
       children_limit_exception: fp.children_limit_exception,
       exception_reason: fp.exception_reason || '',
     });
@@ -119,6 +122,7 @@ export const FosterParentsView: React.FC<Props> = ({ user, persons, onSelectPers
           phone: form.phone,
           address: form.address,
           category: form.category,
+          is_adopter: form.is_adopter,
         });
         // exception ცალკე (admin-only)
         const current = list.find((f) => f.id === editId);
@@ -133,6 +137,7 @@ export const FosterParentsView: React.FC<Props> = ({ user, persons, onSelectPers
           phone: form.phone,
           address: form.address,
           category: form.category,
+          is_adopter: form.is_adopter,
           children_limit_exception: isAdmin ? form.children_limit_exception : false,
           exception_reason: form.exception_reason,
         });
@@ -253,6 +258,7 @@ export const FosterParentsView: React.FC<Props> = ({ user, persons, onSelectPers
           {filterBtn('all', 'ყველა', list.length)}
           {filterBtn('registered', 'რეგისტრირებული', list.filter((f) => f.status === 'რეგისტრირებული').length)}
           {filterBtn('hired', 'დაქირავებული', list.filter((f) => f.status === 'დაქირავებული').length)}
+          {filterBtn('adopter', 'მშვილებელი', list.filter((f) => f.is_adopter).length)}
           {filterBtn('emergency', 'გადაუდებელი')}
           {filterBtn('regular', 'რეგულარული')}
         </div>
@@ -283,7 +289,14 @@ export const FosterParentsView: React.FC<Props> = ({ user, persons, onSelectPers
                   <tr key={fp.id} className="hover:bg-slate-50">
                     <td className="py-3 px-4 font-bold text-slate-900">{fp.first_name} {fp.last_name}</td>
                     <td className="py-3 px-4 font-mono text-slate-700">{fp.personal_number || '—'}</td>
-                    <td className="py-3 px-4"><StatusBadge type="foster_status" value={fp.status || 'რეგისტრირებული'} /></td>
+                    <td className="py-3 px-4">
+                      <div className="flex flex-wrap items-center gap-1">
+                        <StatusBadge type="foster_status" value={fp.status || 'რეგისტრირებული'} />
+                        {fp.is_adopter && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-purple-50 text-purple-800 border border-purple-300">მშვილებელი</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="py-3 px-4"><StatusBadge type="foster_category" value={fp.category} /></td>
                     <td className="py-3 px-4 font-bold text-slate-800">{childrenLabel(fp)}</td>
                     <td className="py-3 px-4">
@@ -363,6 +376,12 @@ export const FosterParentsView: React.FC<Props> = ({ user, persons, onSelectPers
                 </select>
               </div>
 
+              <label className="flex items-center gap-2 p-3 bg-purple-50 border border-purple-200 rounded-xl font-semibold text-purple-900 cursor-pointer">
+                <input type="checkbox" checked={form.is_adopter}
+                  onChange={(e) => setForm({ ...form, is_adopter: e.target.checked })} />
+                <span>მშვილებელი (მშვილებელი ოჯახი)</span>
+              </label>
+
               {isAdmin && (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
                   <label className="flex items-center gap-2 font-semibold text-amber-900 cursor-pointer">
@@ -399,9 +418,12 @@ export const FosterParentsView: React.FC<Props> = ({ user, persons, onSelectPers
               <div>
                 <h3 className="text-lg font-bold text-slate-900">{detail.first_name} {detail.last_name}</h3>
                 <p className="text-xs text-slate-500 font-mono">პ.ნ: {detail.personal_number || '—'} · ტელ: {detail.phone || '—'}</p>
-                <div className="flex items-center gap-2 mt-2">
+                <div className="flex flex-wrap items-center gap-2 mt-2">
                   <StatusBadge type="foster_status" value={detail.status || 'რეგისტრირებული'} />
                   <StatusBadge type="foster_category" value={detail.category} />
+                  {detail.is_adopter && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-purple-50 text-purple-800 border border-purple-300">მშვილებელი</span>
+                  )}
                 </div>
               </div>
               <button onClick={() => setDetailId(null)} className="p-2 text-slate-400 hover:text-slate-700 bg-slate-100 rounded-xl cursor-pointer">

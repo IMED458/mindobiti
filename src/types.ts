@@ -30,6 +30,7 @@ export interface FosterParent {
   phone?: string;
   address?: string;
   category: FosterCategory;
+  is_adopter?: boolean; // მშვილებელი (მშვილებელი ოჯახი)
   children_limit_exception: boolean;
   exception_reason?: string;
   exception_granted_by?: string;
@@ -67,6 +68,24 @@ export interface ContactPerson {
   last_name: string;
   personal_number: string;
   phone: string;
+}
+
+// სამშვილებლო სტატუსი
+export type AdoptionStatus = 'გასაშვილებელი' | 'გაშვილებული';
+
+// მშვილებელი ოჯახის საპასპორტე მონაცემები (გაშვილებულ ბავშვზე)
+export interface AdoptiveFamily {
+  first_name: string;
+  last_name: string;
+  personal_number: string;
+  passport_number: string;
+  spouse_name?: string;
+  spouse_personal_number?: string;
+  spouse_passport_number?: string;
+  address?: string;
+  phone?: string;
+  decision_number?: string;
+  adoption_date?: string;
 }
 
 export type PlacementType = 
@@ -195,6 +214,9 @@ export interface Person {
   admission_source: string;
   person_status: PersonStatus;
   contact_person: ContactPerson;
+  case_manager?: string; // ქეის მენეჯერი / სოციალური მუშაკი
+  adoption_status?: AdoptionStatus; // გასაშვილებელი / გაშვილებული
+  adoptive_family?: AdoptiveFamily; // მშვილებელი ოჯახის მონაცემები (თუ გაშვილებულია)
   case_status: 'აქტიური' | 'დახურული' | 'არქივირებული';
   is_locked: boolean;
   locked_by?: string;
